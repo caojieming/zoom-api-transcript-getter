@@ -46,11 +46,11 @@ function getTranscriptsHalfYear() {
 
 /**
  * Main function to get historical Zoom meetings within the past week,
- * extract details and participant lists, and write them into Google Sheets.
+ * extract transcripts and recordings, and write them into Google drive folder.
  * inFrom: start date of time period observed, defaulting to const FROM
  * inTo: end date of time period observed, defaulting to const TO
  */
-function getTranscripts(inFrom = FROM, inTo = TO) {
+function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
   // Fetch access token using existing client function (assumed to be defined globally)
   const accessToken = getZoomAccessToken();
 
@@ -98,19 +98,9 @@ function getTranscripts(inFrom = FROM, inTo = TO) {
   } while (nextMeetingPageToken);
 
 
-  // Filter for unique meetings based on UUID
-  var uniqueMeetings = [];
-  var seenUuids = new Set();
+  // Filter for wanted meetings
+  var filteredMeetings = [];
   meetings.forEach(function (meeting) {
-    if (meeting.meeting_uuid && !seenUuids.has(meeting.meeting_uuid)) {
-      seenUuids.add(meeting.meeting_uuid);
-      uniqueMeetings.push(meeting);
-    }
-  });
-
-
-  // 2. Iterate through each unique meeting and build the spreadsheets
-  uniqueMeetings.forEach(function (meeting) {
     var meetingId = meeting.meeting_id;
 
     // optional check/filter for meeting ID
@@ -125,9 +115,19 @@ function getTranscripts(inFrom = FROM, inTo = TO) {
       return;
     }
 
-    var docName = convertISOTimeZone(startTime);
+    // passed all filters, add meeting to filteredMeetings list
+    filteredMeetings.push(meeting);
+  });
+
+
+  // 2. Iterate through filtered list of meetings for transcripts
+  filteredMeetings.forEach(function (meeting) {
+    var meetingId = meeting.meeting_id;
+    var startTime = meeting.start_time || "";
+
+    var docName = "[Transcript] " + convertISOTimeZone(startTime);
     // Skip if a doc with this name already exists
-    if (docNameAlreadyExists(DRIVE_FOLDER_ID, docName)) {
+    if (fileNameAlreadyExists(DRIVE_FOLDER_ID, docName)) {
       return;
     }
 
@@ -137,36 +137,86 @@ function getTranscripts(inFrom = FROM, inTo = TO) {
     // GET /meetings/{meetingId}/transcript
     var url = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/transcript`;
 
-    const rawData = httpGetData(url, accessToken);
-    var data = JSON.parse(rawData);
+    const rawData = httpGetData(url, accessToken, convertISOTimeZone(startTime));
+    const code = rawData.code;
+    const data = JSON.parse(rawData.data);
 
-    // check if the transcript is available/downloadable from the meeting
+    // check code from httpGetData
+    if(code !== 200) {
+      // skip this meeting and continue to the next meeting (error code has already been output to console from httpGetData)
+      return;
+    }
+
+    // check if the transcript is available/downloadable from the meeting (outside of standard error codes)
     if(data.can_download !== true) {
-      console.error("Transcript not downloadable: " + data.download_restriction_reason);
+      console.error(`Transcript for ${convertISOTimeZone(startTime)} not downloadable: ${data.download_restriction_reason}`);
       // skip this meeting and continue to the next meeting
       return;
     }
 
     // get download url
     const downloadUrl = data.download_url;
-    // if(!downloadUrl) {
-    //   console.error("Download URL empty.");
-    //   // skip this meeting and continue to the next meeting
-    //   return;
-    // }
 
     // this is the transcript, ready to go
-    const transcript = httpGetData(downloadUrl, accessToken);
+    const rawTranscript = httpGetData(downloadUrl, accessToken);
+    const transcript = rawTranscript.data;
 
     // create a google doc with the transcript
     createGoogleDocInFolder(DRIVE_FOLDER_ID, docName, transcript);
+
+    // small timeout to prevent very specific errors
+    Utilities.sleep(500);
+  });
+
+
+  // 3. Iterate through filtered list of meetings for recordings (seperate loop from transcripts because meetings can have either, neither, or both)
+  filteredMeetings.forEach(function (meeting) {
+    var meetingId = meeting.meeting_id;
+    var startTime = meeting.start_time || "";
+
+    var fileName = "[Recording] " + convertISOTimeZone(startTime);
+    // Skip if a doc with this name already exists
+    if (fileNameAlreadyExists(DRIVE_FOLDER_ID, fileName)) {
+      return;
+    }
+
+    const meetingUuid = meeting.meeting_uuid;
+    const meetingUuidEncoded = prepareUuid(meetingUuid);
+
+    // GET /meetings/{meetingId}/recordings
+    var url = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/recordings`;
+
+    const rawData = httpGetData(url, accessToken, convertISOTimeZone(startTime));
+    const code = rawData.code;
+    const data = JSON.parse(rawData.data);
+
+    // check code from httpGetData
+    if(code !== 200) {
+      // skip this meeting and continue to the next meeting (error code has already been output to console from httpGetData)
+      return;
+    }
+
+    // get download url
+    const downloadUrl = data.recording_files[0].download_url;
+    // TODO: the below line of code works, nice! start figuring out where to go from here
+    // console.log(`download url for ${convertISOTimeZone(startTime)}: ${downloadUrl}`);
+
+    // // this is the recording, ready to go
+    // const rawRecording = httpGetData(downloadUrl, accessToken);
+    // const recording = rawRecording.data;
+
+    // // create a folder(?) with the recording
+    // createGoogleDocInFolder(DRIVE_FOLDER_ID, docName, recording);
+
+    // small timeout to prevent very specific errors
+    Utilities.sleep(500);
   });
 }
 
 
 
 // generic get data from a link/API endpoint (use if you don't care for custom error messages/actions)
-function httpGetData(url, accessToken) {
+function httpGetData(url, accessToken, id = "") {
   var options = {
     method: "get",
     headers: {
@@ -179,20 +229,28 @@ function httpGetData(url, accessToken) {
   const rawData = res.getContentText();
   if (code < 200 || code >= 300) {
     // throw new Error(`HTTP code ${code} for ${url}, data: ${rawData}`);
-    console.error(`HTTP code ${code} for ${url}, data: ${rawData}`);
+    console.error(`[${id}]   HTTP code ${code}, data: ${rawData}`);
   }
-  return rawData;
+  return { code: code, data: rawData };
 }
 
 
-// checks if a doc with the input name exists
-function docNameAlreadyExists(folderId, targetName) {
+// checks if a file/folder with the input name exists
+function fileNameAlreadyExists(folderId, targetName) {
   const folder = DriveApp.getFolderById(folderId);
 
-  // Check only within this folder (not subfolders)
+  // Check files within this folder
   const files = folder.getFiles();
   while (files.hasNext()) {
     const f = files.next();
+    if (f.getName() === targetName) {
+      return true;
+    }
+  }
+  // Check folders within this folder
+  const subfolders = folder.getFolders();
+  while (subfolders.hasNext()) {
+    const f = subfolders.next();
     if (f.getName() === targetName) {
       return true;
     }
