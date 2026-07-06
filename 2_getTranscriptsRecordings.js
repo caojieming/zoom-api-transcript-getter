@@ -1,14 +1,14 @@
 // helper constants used for setting FROM and TO times
 const NOW = new Date().toISOString().split('T')[0]; // Today (YYYY-MM-DD)
-const ONE_DAY_AGO = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const THREE_DAYS_AGO = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const ONE_WEEK_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // One week ago (YYYY-MM-DD)
-const ONE_MONTH_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const TWO_MONTHS_AGO = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const THREE_MONTHS_AGO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const FOUR_MONTHS_AGO = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const FIVE_MONTHS_AGO = new Date(Date.now() - 150 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const SIX_MONTHS_AGO = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+const ONE_DAY_AGO = daysAgo(1);
+const THREE_DAYS_AGO = daysAgo(3);
+const ONE_WEEK_AGO = daysAgo(7);
+const ONE_MONTH_AGO = daysAgo(30);
+const TWO_MONTHS_AGO = daysAgo(60);
+const THREE_MONTHS_AGO = daysAgo(90);
+const FOUR_MONTHS_AGO = daysAgo(120);
+const FIVE_MONTHS_AGO = daysAgo(150);
+const SIX_MONTHS_AGO = daysAgo(180);
 
 
 // request constants, these are sent to Zoom API as part of the request
@@ -29,18 +29,18 @@ const MEETING_ID = "";
 // toggle to include only 4th thursdays of the month
 const ONLY_FOURTH_THURS = true;
 
-
+// the last part of the desired folder link (https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID})
 const DRIVE_FOLDER_ID = "";
 
 
 // can't get more than 1 month worth of records at a time, need to call multiple times
-function getTranscriptsHalfYear() {
-  getTranscripts(ONE_MONTH_AGO, NOW);
-  getTranscripts(TWO_MONTHS_AGO, ONE_MONTH_AGO);
-  getTranscripts(THREE_MONTHS_AGO, TWO_MONTHS_AGO);
-  getTranscripts(FOUR_MONTHS_AGO, THREE_MONTHS_AGO);
-  getTranscripts(FIVE_MONTHS_AGO, FOUR_MONTHS_AGO);
-  getTranscripts(SIX_MONTHS_AGO, FIVE_MONTHS_AGO);
+function getTranscriptsRecordingsHalfYear() {
+  getTranscriptsRecordings(ONE_MONTH_AGO, NOW);
+  getTranscriptsRecordings(TWO_MONTHS_AGO, ONE_MONTH_AGO);
+  getTranscriptsRecordings(THREE_MONTHS_AGO, TWO_MONTHS_AGO);
+  getTranscriptsRecordings(FOUR_MONTHS_AGO, THREE_MONTHS_AGO);
+  getTranscriptsRecordings(FIVE_MONTHS_AGO, FOUR_MONTHS_AGO);
+  getTranscriptsRecordings(SIX_MONTHS_AGO, FIVE_MONTHS_AGO);
 }
 
 
@@ -120,65 +120,11 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
   });
 
 
-  // 2. Iterate through filtered list of meetings for transcripts
+  // 2. Iterate through filtered list of meetings for recordings
   filteredMeetings.forEach(function (meeting) {
-    var meetingId = meeting.meeting_id;
     var startTime = meeting.start_time || "";
 
-    var docName = "[Transcript] " + convertISOTimeZone(startTime);
-    // Skip if a doc with this name already exists
-    if (fileNameAlreadyExists(DRIVE_FOLDER_ID, docName)) {
-      return;
-    }
-
-    const meetingUuid = meeting.meeting_uuid;
-    const meetingUuidEncoded = prepareUuid(meetingUuid);
-
-    // GET /meetings/{meetingId}/transcript
-    var url = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/transcript`;
-
-    const rawData = httpGetData(url, accessToken, convertISOTimeZone(startTime));
-    const code = rawData.code;
-    const data = JSON.parse(rawData.data);
-
-    // check code from httpGetData
-    if(code !== 200) {
-      // skip this meeting and continue to the next meeting (error code has already been output to console from httpGetData)
-      return;
-    }
-
-    // check if the transcript is available/downloadable from the meeting (outside of standard error codes)
-    if(data.can_download !== true) {
-      console.error(`Transcript for ${convertISOTimeZone(startTime)} not downloadable: ${data.download_restriction_reason}`);
-      // skip this meeting and continue to the next meeting
-      return;
-    }
-
-    // get download url
-    const downloadUrl = data.download_url;
-
-    // this is the transcript, ready to go
-    const rawTranscript = httpGetData(downloadUrl, accessToken);
-    const transcript = rawTranscript.data;
-
-    // create a google doc with the transcript
-    createGoogleDocInFolder(DRIVE_FOLDER_ID, docName, transcript);
-
-    // small timeout to prevent very specific errors
-    Utilities.sleep(500);
-  });
-
-
-  // 3. Iterate through filtered list of meetings for recordings (seperate loop from transcripts because meetings can have either, neither, or both)
-  filteredMeetings.forEach(function (meeting) {
-    var meetingId = meeting.meeting_id;
-    var startTime = meeting.start_time || "";
-
-    var fileName = "[Recording] " + convertISOTimeZone(startTime);
-    // Skip if a doc with this name already exists
-    if (fileNameAlreadyExists(DRIVE_FOLDER_ID, fileName)) {
-      return;
-    }
+    var datetime = convertISOTimeZone(startTime);
 
     const meetingUuid = meeting.meeting_uuid;
     const meetingUuidEncoded = prepareUuid(meetingUuid);
@@ -196,20 +142,55 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
       return;
     }
 
-    // get download url
-    const downloadUrl = data.recording_files[0].download_url;
-    // TODO: the below line of code works, nice! start figuring out where to go from here
-    // console.log(`download url for ${convertISOTimeZone(startTime)}: ${downloadUrl}`);
+    // test to see what recordings there are
+    // console.log(data.recording_files);
 
-    // // this is the recording, ready to go
-    // const rawRecording = httpGetData(downloadUrl, accessToken);
-    // const recording = rawRecording.data;
+    // loop through all recording_files, searching for file_type = TRANSCRIPT, MP4, CHAT -> place them in drive (see if they can be placed raw or as original files)
+    data.recording_files.forEach(function(file) {
+      if(file.file_type === "MP4") {
+        const fileName = datetime + " [Recording]";
+        // Skip if a file with this name already exists in the folder
+        if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+          console.log("File already downloaded: " + fileName);
+          return;
+        }
 
-    // // create a folder(?) with the recording
-    // createGoogleDocInFolder(DRIVE_FOLDER_ID, docName, recording);
+        console.log("Placeholder: " + fileName);
+      }
+      else if(file.file_type === "TRANSCRIPT") {
+        const fileName = datetime + " [Transcript]";
+        // Skip if a file with this name already exists in the folder
+        if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+          console.log("File already downloaded: " + fileName);
+          return;
+        }
+
+        const downloadUrl = file.download_url;
+        const rawTranscript = httpGetData(downloadUrl, accessToken);
+        const transcript = rawTranscript.data;
+        console.log("Please wait, downloading: " + fileName);
+        createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
+        console.log("Downloaded: " + fileName);
+      }
+      else if(file.file_type === "CHAT") {
+        const fileName = datetime + " [Recording Chat]";
+        // Skip if a file with this name already exists in the folder
+        if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+          console.log("File already downloaded: " + fileName);
+          return;
+        }
+
+        const downloadUrl = file.download_url;
+        const rawChat = httpGetData(downloadUrl, accessToken);
+        const transcript = rawChat.data;
+        console.log("Please wait, downloading: " + fileName);
+        createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
+        console.log("Downloaded: " + fileName);
+      }
+    });
 
     // small timeout to prevent very specific errors
-    Utilities.sleep(500);
+    // Utilities.sleep(200);
   });
 }
 
@@ -229,14 +210,14 @@ function httpGetData(url, accessToken, id = "") {
   const rawData = res.getContentText();
   if (code < 200 || code >= 300) {
     // throw new Error(`HTTP code ${code} for ${url}, data: ${rawData}`);
-    console.error(`[${id}]   HTTP code ${code}, data: ${rawData}`);
+    console.error(`[${id}]  HTTP code ${code}, data: ${rawData}`);
   }
   return { code: code, data: rawData };
 }
 
 
 // checks if a file/folder with the input name exists
-function fileNameAlreadyExists(folderId, targetName) {
+function fileNameExists(folderId, targetName) {
   const folder = DriveApp.getFolderById(folderId);
 
   // Check files within this folder
@@ -248,13 +229,13 @@ function fileNameAlreadyExists(folderId, targetName) {
     }
   }
   // Check folders within this folder
-  const subfolders = folder.getFolders();
-  while (subfolders.hasNext()) {
-    const f = subfolders.next();
-    if (f.getName() === targetName) {
-      return true;
-    }
-  }
+  // const subfolders = folder.getFolders();
+  // while (subfolders.hasNext()) {
+  //   const f = subfolders.next();
+  //   if (f.getName() === targetName) {
+  //     return true;
+  //   }
+  // }
   return false;
 }
 
@@ -312,4 +293,10 @@ function prepareUuid(uuid) {
     return encodeURIComponent(encodeURIComponent(uuid));
   }
   return encodeURIComponent(uuid);
+}
+
+
+// a simple function to get the datetime "days" ago
+function daysAgo(days) {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 }
