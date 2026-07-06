@@ -228,14 +228,6 @@ function fileNameExists(folderId, targetName) {
       return true;
     }
   }
-  // Check folders within this folder
-  // const subfolders = folder.getFolders();
-  // while (subfolders.hasNext()) {
-  //   const f = subfolders.next();
-  //   if (f.getName() === targetName) {
-  //     return true;
-  //   }
-  // }
   return false;
 }
 
