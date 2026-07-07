@@ -148,14 +148,21 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
     // loop through all recording_files, searching for file_type = TRANSCRIPT, MP4, CHAT -> place them in drive (see if they can be placed raw or as original files)
     data.recording_files.forEach(function(file) {
       if(file.file_type === "MP4") {
-        const fileName = datetime + " [Recording]";
+        const fileName = datetime + " [Recording].mp4";
         // Skip if a file with this name already exists in the folder
         if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
           console.log("File already downloaded: " + fileName);
           return;
         }
 
-        console.log("Placeholder: " + fileName);
+        const downloadUrl = file.download_url;
+        console.log("Downloading: " + fileName);
+        const rawRecording = httpGetBlob(downloadUrl, accessToken);
+        const recording = rawRecording.blob;
+        recording.setName(fileName + ".mp4");
+        console.log("Importing: " + fileName);
+        const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+        folder.createFile(recording);
       }
       else if(file.file_type === "TRANSCRIPT") {
         const fileName = datetime + " [Transcript]";
@@ -166,11 +173,12 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
         }
 
         const downloadUrl = file.download_url;
+        console.log("Downloading: " + fileName);
         const rawTranscript = httpGetData(downloadUrl, accessToken);
         const transcript = rawTranscript.data;
-        console.log("Please wait, downloading: " + fileName);
+        // transcript = transcript.replace(/\n{2,}/g, "\n");
+        console.log("Importing: " + fileName);
         createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
-        console.log("Downloaded: " + fileName);
       }
       else if(file.file_type === "CHAT") {
         const fileName = datetime + " [Recording Chat]";
@@ -181,11 +189,11 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
         }
 
         const downloadUrl = file.download_url;
+        console.log("Downloading: " + fileName);
         const rawChat = httpGetData(downloadUrl, accessToken);
         const transcript = rawChat.data;
-        console.log("Please wait, downloading: " + fileName);
+        console.log("Importing: " + fileName);
         createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
-        console.log("Downloaded: " + fileName);
       }
     });
 
@@ -195,6 +203,26 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
 }
 
 
+
+// generic get data from a link/API endpoint (use if you don't care for custom error messages/actions)
+function httpGetBlob(url, accessToken, id = "") {
+  var options = {
+    method: "get",
+    headers: {
+      "Authorization": "Bearer " + accessToken
+    },
+    muteHttpExceptions: true
+  };
+  const res = UrlFetchApp.fetch(url, options);
+  const code = res.getResponseCode();
+  const data = res.getContentText();
+  const blob = res.getBlob();
+  if (code < 200 || code >= 300) {
+    // throw new Error(`HTTP code ${code} for ${url}, data: ${data}`);
+    console.error(`[${id}]  HTTP code ${code}, data: ${data}`);
+  }
+  return { code: code, blob: blob };
+}
 
 // generic get data from a link/API endpoint (use if you don't care for custom error messages/actions)
 function httpGetData(url, accessToken, id = "") {
@@ -207,12 +235,12 @@ function httpGetData(url, accessToken, id = "") {
   };
   const res = UrlFetchApp.fetch(url, options);
   const code = res.getResponseCode();
-  const rawData = res.getContentText();
+  const data = res.getContentText();
   if (code < 200 || code >= 300) {
-    // throw new Error(`HTTP code ${code} for ${url}, data: ${rawData}`);
-    console.error(`[${id}]  HTTP code ${code}, data: ${rawData}`);
+    // throw new Error(`HTTP code ${code} for ${url}, data: ${data}`);
+    console.error(`[${id}]  HTTP code ${code}, data: ${data}`);
   }
-  return { code: code, data: rawData };
+  return { code: code, data: data };
 }
 
 
