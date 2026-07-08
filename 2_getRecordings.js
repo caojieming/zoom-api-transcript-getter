@@ -34,13 +34,13 @@ const DRIVE_FOLDER_ID = "";
 
 
 // can't get more than 1 month worth of records at a time, need to call multiple times
-function getTranscriptsRecordingsHalfYear() {
-  getTranscriptsRecordings(ONE_MONTH_AGO, NOW);
-  getTranscriptsRecordings(TWO_MONTHS_AGO, ONE_MONTH_AGO);
-  getTranscriptsRecordings(THREE_MONTHS_AGO, TWO_MONTHS_AGO);
-  getTranscriptsRecordings(FOUR_MONTHS_AGO, THREE_MONTHS_AGO);
-  getTranscriptsRecordings(FIVE_MONTHS_AGO, FOUR_MONTHS_AGO);
-  getTranscriptsRecordings(SIX_MONTHS_AGO, FIVE_MONTHS_AGO);
+function getRecordingsHalfYear() {
+  getRecordings(ONE_MONTH_AGO, NOW);
+  getRecordings(TWO_MONTHS_AGO, ONE_MONTH_AGO);
+  getRecordings(THREE_MONTHS_AGO, TWO_MONTHS_AGO);
+  getRecordings(FOUR_MONTHS_AGO, THREE_MONTHS_AGO);
+  getRecordings(FIVE_MONTHS_AGO, FOUR_MONTHS_AGO);
+  getRecordings(SIX_MONTHS_AGO, FIVE_MONTHS_AGO);
 }
 
 
@@ -50,7 +50,7 @@ function getTranscriptsRecordingsHalfYear() {
  * inFrom: start date of time period observed, defaulting to const FROM
  * inTo: end date of time period observed, defaulting to const TO
  */
-function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
+function getRecordings(inFrom = FROM, inTo = TO) {
   // Fetch access token using existing client function (assumed to be defined globally)
   const accessToken = getZoomAccessToken();
 
@@ -156,13 +156,8 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
         }
 
         const downloadUrl = file.download_url;
-        console.log("Downloading: " + fileName);
-        const rawRecording = httpGetBlob(downloadUrl, accessToken);
-        const recording = rawRecording.blob;
-        recording.setName(fileName + ".mp4");
-        console.log("Importing: " + fileName);
-        const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-        folder.createFile(recording);
+        console.log("Downloading + Importing: " + fileName);
+        resumablyDownload(accessToken, downloadUrl, file.file_size, fileName);
       }
       else if(file.file_type === "TRANSCRIPT") {
         const fileName = datetime + " [Transcript]";
@@ -203,26 +198,6 @@ function getTranscriptsRecordings(inFrom = FROM, inTo = TO) {
 }
 
 
-
-// generic get data from a link/API endpoint (use if you don't care for custom error messages/actions)
-function httpGetBlob(url, accessToken, id = "") {
-  var options = {
-    method: "get",
-    headers: {
-      "Authorization": "Bearer " + accessToken
-    },
-    muteHttpExceptions: true
-  };
-  const res = UrlFetchApp.fetch(url, options);
-  const code = res.getResponseCode();
-  const data = res.getContentText();
-  const blob = res.getBlob();
-  if (code < 200 || code >= 300) {
-    // throw new Error(`HTTP code ${code} for ${url}, data: ${data}`);
-    console.error(`[${id}]  HTTP code ${code}, data: ${data}`);
-  }
-  return { code: code, blob: blob };
-}
 
 // generic get data from a link/API endpoint (use if you don't care for custom error messages/actions)
 function httpGetData(url, accessToken, id = "") {
