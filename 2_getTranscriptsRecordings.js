@@ -294,10 +294,29 @@ function isFourthThursday(isoDate) {
  */
 function convertISOTimeZone(iso, newTimeZone = 'America/Los_Angeles') {
   const dt = new Date(iso);
-  const converted = dt.toLocaleString('en-US', { timeZone: newTimeZone,
-    year:'numeric', month:'2-digit', day:'2-digit',
-    hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true });
-  return converted; // e.g. "06/08/2023, 11:30:00 AM"
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: newTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  }).formatToParts(dt);
+
+  const get = (type) => parts.find(p => p.type === type)?.value;
+
+  const year = get('year');
+  const month = get('month');
+  const day = get('day');
+  const hour = get('hour');
+  const minute = get('minute');
+  const second = get('second');
+  const dayPeriod = get('dayPeriod'); // AM/PM
+
+  return `${year}/${month}/${day}, ${hour}:${minute}:${second} ${dayPeriod}`;
 }
 
 
