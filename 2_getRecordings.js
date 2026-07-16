@@ -59,17 +59,17 @@ function getRecordings(inFrom = FROM, inTo = TO) {
 
   // 1. Paginated fetch of past meetings from the Zoom report API
   do {
-    var url = "https://api.zoom.us/v2" + "/report/history_meetings" +
+    var meetingsAPI = "https://api.zoom.us/v2" + "/report/history_meetings" +
       "?from=" + inFrom +
       "&to=" + inTo +
       "&page_size=" + PAGE_SIZE +
       "&meeting_type=" + MEETING_TYPE;
 
     if (SEARCH_KEY) {
-      url += "&search_key=" + encodeURIComponent(SEARCH_KEY);
+      meetingsAPI += "&search_key=" + encodeURIComponent(SEARCH_KEY);
     }
     if (nextMeetingPageToken) {
-      url += "&next_page_token=" + encodeURIComponent(nextMeetingPageToken);
+      meetingsAPI += "&next_page_token=" + encodeURIComponent(nextMeetingPageToken);
     }
 
     var options = {
@@ -81,7 +81,7 @@ function getRecordings(inFrom = FROM, inTo = TO) {
     };
 
     // manually write this out because we want custom actions if we get an error (stop paginating)
-    var response = UrlFetchApp.fetch(url, options);
+    var response = UrlFetchApp.fetch(meetingsAPI, options);
     var responseCode = response.getResponseCode();
 
     if (responseCode === 200) {
@@ -130,67 +130,89 @@ function getRecordings(inFrom = FROM, inTo = TO) {
     const meetingUuidEncoded = prepareUuid(meetingUuid);
 
     // GET /meetings/{meetingId}/recordings
-    var url = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/recordings`;
+    var recordingsAPI = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/recordings`;
 
-    const rawData = httpGetData(url, accessToken, convertISOTimeZone(startTime));
-    const code = rawData.code;
-    const data = JSON.parse(rawData.data);
-
-    // check code from httpGetData
-    if(code !== 200) {
-      // skip this meeting and continue to the next meeting (error code has already been output to console from httpGetData)
-      return;
-    }
+    const rawRecordingsData = httpGetData(recordingsAPI, accessToken, convertISOTimeZone(startTime));
+    const recordingsCode = rawRecordingsData.code;
+    const recordingsData = JSON.parse(rawRecordingsData.data);
 
     // test to see what recordings there are
     // console.log(data.recording_files);
 
-    // loop through all recording_files, searching for file_type = TRANSCRIPT, MP4, CHAT -> place them in drive (see if they can be placed raw or as original files)
-    data.recording_files.forEach(function(file) {
-      if(file.file_type === "MP4") {
-        const fileName = datetime + " [Recording].mp4";
-        // Skip if a file with this name already exists in the folder
-        if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
-          console.log("File already downloaded: " + fileName);
-          return;
+    // check code from httpGetData
+    if(recordingsCode !== 200) {
+      // no recordings to get, move on to try and get the summary (it's apparently possible to have recordings disabled and summary enabled)
+    }
+    else {
+      // loop through all recording_files, searching for file_type = TRANSCRIPT, MP4, CHAT -> place them in drive (see if they can be placed raw or as original files)
+      recordingsData.recording_files.forEach(function(file) {
+        if(file.file_type === "MP4") {
+          const fileName = datetime + " [Recording].mp4";
+          // Skip if a file with this name already exists in the folder
+          if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+            console.log("File already imported: " + fileName);
+          }
+          else {
+            const downloadUrl = file.download_url;
+            console.log("Downloading + Importing: " + fileName);
+            resumablyDownload(accessToken, downloadUrl, file.file_size, fileName);
+          }
         }
+        else if(file.file_type === "TRANSCRIPT") {
+          const fileName = datetime + " [Transcript]";
+          // Skip if a file with this name already exists in the folder
+          if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+            console.log("File already imported: " + fileName);
+          }
+          else {
+            const downloadUrl = file.download_url;
+            console.log("Downloading: " + fileName);
+            const rawTranscript = httpGetData(downloadUrl, accessToken);
+            const transcript = rawTranscript.data;
+            // transcript = transcript.replace(/\n{2,}/g, "\n");
+            console.log("Importing: " + fileName);
+            createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
+          }
+        }
+        else if(file.file_type === "CHAT") {
+          const fileName = datetime + " [Recording Chat]";
+          // Skip if a file with this name already exists in the folder
+          if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+            console.log("File already imported: " + fileName);
+          }
+          else {
+            const downloadUrl = file.download_url;
+            console.log("Downloading: " + fileName);
+            const rawChat = httpGetData(downloadUrl, accessToken);
+            const transcript = rawChat.data;
+            console.log("Importing: " + fileName);
+            createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
+          }
+        }
+      });
+    }
 
-        const downloadUrl = file.download_url;
-        console.log("Downloading + Importing: " + fileName);
-        resumablyDownload(accessToken, downloadUrl, file.file_size, fileName);
+    var summaryAPI = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/meeting_summary`;
+    const rawSummaryData = httpGetData(summaryAPI, accessToken, convertISOTimeZone(startTime));
+    const summaryCode = rawSummaryData.code;
+    const summaryData = JSON.parse(rawSummaryData.data);
+
+    // check code from httpGetData
+    if(summaryCode !== 200) {
+      // do nothing, code will naturally move on to next meeting from here
+    }
+    else {
+      const fileName = datetime + " [Summary]";
+      // Skip if a file with this name already exists in the folder
+      if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+        console.log("File already imported: " + fileName);
       }
-      else if(file.file_type === "TRANSCRIPT") {
-        const fileName = datetime + " [Transcript]";
-        // Skip if a file with this name already exists in the folder
-        if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
-          console.log("File already downloaded: " + fileName);
-          return;
-        }
-
-        const downloadUrl = file.download_url;
-        console.log("Downloading: " + fileName);
-        const rawTranscript = httpGetData(downloadUrl, accessToken);
-        const transcript = rawTranscript.data;
-        // transcript = transcript.replace(/\n{2,}/g, "\n");
+      else {
+        const summaryText = summaryData.summary_content;
         console.log("Importing: " + fileName);
-        createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
+        createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, summaryText);
       }
-      else if(file.file_type === "CHAT") {
-        const fileName = datetime + " [Recording Chat]";
-        // Skip if a file with this name already exists in the folder
-        if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
-          console.log("File already downloaded: " + fileName);
-          return;
-        }
-
-        const downloadUrl = file.download_url;
-        console.log("Downloading: " + fileName);
-        const rawChat = httpGetData(downloadUrl, accessToken);
-        const transcript = rawChat.data;
-        console.log("Importing: " + fileName);
-        createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
-      }
-    });
+    }
 
     // small timeout to prevent very specific errors
     // Utilities.sleep(200);
