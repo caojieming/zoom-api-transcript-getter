@@ -59,17 +59,17 @@ function getRecordings(inFrom = FROM, inTo = TO) {
 
   // 1. Paginated fetch of past meetings from the Zoom report API
   do {
-    var meetingsAPI = "https://api.zoom.us/v2" + "/report/history_meetings" +
+    var meetingsUrl = "https://api.zoom.us/v2/report/history_meetings" +
       "?from=" + inFrom +
       "&to=" + inTo +
       "&page_size=" + PAGE_SIZE +
       "&meeting_type=" + MEETING_TYPE;
 
     if (SEARCH_KEY) {
-      meetingsAPI += "&search_key=" + encodeURIComponent(SEARCH_KEY);
+      meetingsUrl += "&search_key=" + encodeURIComponent(SEARCH_KEY);
     }
     if (nextMeetingPageToken) {
-      meetingsAPI += "&next_page_token=" + encodeURIComponent(nextMeetingPageToken);
+      meetingsUrl += "&next_page_token=" + encodeURIComponent(nextMeetingPageToken);
     }
 
     var options = {
@@ -81,7 +81,7 @@ function getRecordings(inFrom = FROM, inTo = TO) {
     };
 
     // manually write this out because we want custom actions if we get an error (stop paginating)
-    var response = UrlFetchApp.fetch(meetingsAPI, options);
+    var response = UrlFetchApp.fetch(meetingsUrl, options);
     var responseCode = response.getResponseCode();
 
     if (responseCode === 200) {
@@ -130,9 +130,9 @@ function getRecordings(inFrom = FROM, inTo = TO) {
     const meetingUuidEncoded = prepareUuid(meetingUuid);
 
     // GET /meetings/{meetingId}/recordings
-    var recordingsAPI = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/recordings`;
+    var recordingsUrl = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/recordings`;
 
-    const rawRecordingsData = httpGetData(recordingsAPI, accessToken, convertISOTimeZone(startTime));
+    const rawRecordingsData = httpGetData(recordingsUrl, accessToken, convertISOTimeZone(startTime));
     const recordingsCode = rawRecordingsData.code;
     const recordingsData = JSON.parse(rawRecordingsData.data);
 
@@ -192,8 +192,8 @@ function getRecordings(inFrom = FROM, inTo = TO) {
       });
     }
 
-    var summaryAPI = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/meeting_summary`;
-    const rawSummaryData = httpGetData(summaryAPI, accessToken, convertISOTimeZone(startTime));
+    var summaryUrl = `https://api.zoom.us/v2/meetings/${meetingUuidEncoded}/meeting_summary`;
+    const rawSummaryData = httpGetData(summaryUrl, accessToken, convertISOTimeZone(startTime));
     const summaryCode = rawSummaryData.code;
     const summaryData = JSON.parse(rawSummaryData.data);
 
