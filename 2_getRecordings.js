@@ -33,6 +33,7 @@ const ONLY_FOURTH_THURS = true;
 const DRIVE_FOLDER_ID = "";
 
 
+
 // can't get more than 1 month worth of records at a time, need to call multiple times
 function getRecordingsHalfYear() {
   getRecordings(ONE_MONTH_AGO, NOW);
@@ -152,15 +153,15 @@ function getRecordings(inFrom = FROM, inTo = TO) {
       // loop through all recording_files, searching for file_type = TRANSCRIPT, MP4, CHAT -> place them in drive (see if they can be placed raw or as original files)
       recordingsData.recording_files.forEach(function(file) {
         if(file.file_type === "MP4") {
-          const fileName = datetime + " [Recording].mp4";
+          const fileName = datetime + " [Recording Link]";
           // Skip if a file with this name already exists in the folder
           if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
             console.log("File already imported: " + fileName);
           }
           else {
-            const downloadUrl = file.download_url;
             console.log("Downloading + Importing: " + fileName);
-            resumablyDownload(accessToken, downloadUrl, file.file_size, fileName);
+            const videoUrl = file.play_url;
+            createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, videoUrl);
           }
         }
         else if(file.file_type === "TRANSCRIPT") {
@@ -180,7 +181,7 @@ function getRecordings(inFrom = FROM, inTo = TO) {
           }
         }
         else if(file.file_type === "CHAT") {
-          const fileName = datetime + " [Recording Chat]";
+          const fileName = datetime + " [Chat]";
           // Skip if a file with this name already exists in the folder
           if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
             console.log("File already imported: " + fileName);
