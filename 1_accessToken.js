@@ -1,8 +1,3 @@
-// set these according to your Zoom App
-const ACCOUNT_ID = '';
-const CLIENT_ID = '';
-const CLIENT_SECRET = '';
-
 function getZoomAccessToken() {
   const tokenUrl = 'https://zoom.us/oauth/token';
   const basic = Utilities.base64Encode(`${CLIENT_ID}:${CLIENT_SECRET}`);

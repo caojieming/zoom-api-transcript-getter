@@ -23,14 +23,10 @@ const SEARCH_KEY = "";
 const PAGE_SIZE = 200;
 
 
-// extra constants, used for misc filtering
-const MEETING_ID = "";
+/* Extra filters */
 
 // toggle to include only 4th thursdays of the month
 const ONLY_FOURTH_THURS = true;
-
-// the last part of the desired folder link (https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID})
-const DRIVE_FOLDER_ID = "";
 
 
 
