@@ -148,19 +148,22 @@ function getRecordings(inFrom = FROM, inTo = TO) {
     else {
       // loop through all recording_files, searching for file_type = TRANSCRIPT, MP4, CHAT -> place them in drive (see if they can be placed raw or as original files)
       recordingsData.recording_files.forEach(function(file) {
-        if(file.file_type === "MP4") {
-          const fileName = datetime + " [Recording Link]";
-          // Skip if a file with this name already exists in the folder
-          if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
-            console.log("File already imported: " + fileName);
-          }
-          else {
-            console.log("Downloading + Importing: " + fileName);
-            const videoUrl = file.play_url;
-            createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, videoUrl);
-          }
-        }
-        else if(file.file_type === "TRANSCRIPT") {
+        // if(file.file_type === "MP4") {
+        //   const fileName = datetime + " [Recording Link]";
+        //   // Skip if a file with this name already exists in the folder
+        //   if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
+        //     console.log("File already imported: " + fileName);
+        //   }
+        //   else {
+        //     console.log("Downloading + Importing: " + fileName);
+        //     const videoUrl = file.play_url;
+        //     createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, videoUrl);
+        //     // if you don't want the mp4 download, comment out the below
+        //     const downloadUrl = file.download_url;
+        //     resumablyDownload(accessToken, downloadUrl, file.file_size, fileName);
+        //   }
+        // }
+        if(file.file_type === "TRANSCRIPT") {
           const fileName = datetime + " [Transcript]";
           // Skip if a file with this name already exists in the folder
           if (fileNameExists(DRIVE_FOLDER_ID, fileName)) {
@@ -170,8 +173,9 @@ function getRecordings(inFrom = FROM, inTo = TO) {
             const downloadUrl = file.download_url;
             console.log("Downloading: " + fileName);
             const rawTranscript = httpGetData(downloadUrl, accessToken);
-            const transcript = rawTranscript.data;
-            // transcript = transcript.replace(/\n{2,}/g, "\n");
+            let transcript = rawTranscript.data;
+            // just removes the excessive number of extra newlines in the transcript
+            transcript = transcript.replace(/\n/g, '');
             console.log("Importing: " + fileName);
             createGoogleDocInFolder(DRIVE_FOLDER_ID, fileName, transcript);
           }
